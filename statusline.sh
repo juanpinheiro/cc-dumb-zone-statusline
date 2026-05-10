@@ -130,12 +130,12 @@ if [ -n "$CWD_REAL" ] && [ -d "$CWD_REAL" ]; then
 fi
 
 # ---- render ----
-LINE1="📁 ${BLUE}${CWD:-?}${RESET}"
-[ -n "$GIT_BRANCH" ]   && LINE1="${LINE1}  🌿 ${MINT}${GIT_BRANCH}${RESET}"
-LINE1="${LINE1}  🤖 ${PURPLE}${MODEL}${RESET}"
-[ -n "$CC_VERSION" ] && [ "$CC_VERSION" != "null" ]     && LINE1="${LINE1}  ${DIM}v${CC_VERSION}${RESET}"
+LINE1="${ZONE_COLOR}${ZONE_LABEL}${RESET} │ ${ZONE_COLOR}${CTX_FMT}/${WIN_FMT} (${WIN_PCT}%)${RESET} ${BAR} │ ⏱ ${SESSION_FMT}"
 
-LINE2="${ZONE_COLOR}${ZONE_LABEL}${RESET} │ ${ZONE_COLOR}${CTX_FMT}/${WIN_FMT} (${WIN_PCT}%)${RESET} ${BAR} │ ⏱ ${SESSION_FMT}"
+LINE2="📁 ${BLUE}${CWD:-?}${RESET}"
+[ -n "$GIT_BRANCH" ]   && LINE2="${LINE2}  🌿 ${MINT}${GIT_BRANCH}${RESET}"
+LINE2="${LINE2}  🤖 ${PURPLE}${MODEL}${RESET}"
+[ -n "$CC_VERSION" ] && [ "$CC_VERSION" != "null" ]     && LINE2="${LINE2}  ${DIM}v${CC_VERSION}${RESET}"
 
 LINE3="💰 ${GOLD}\$${COST_FMT}${RESET}"
 [ -n "$BURN_RATE" ] && LINE3="${LINE3} ${DIM}(${RESET}${BURN}\$${BURN_RATE}/h${RESET}${DIM})${RESET}"

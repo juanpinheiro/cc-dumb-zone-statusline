@@ -5,8 +5,8 @@ A Claude Code statusline that tells you, at a glance, **when your model is about
 Three lines. Color-coded zones. Model-aware thresholds. No npm, no Node, no config — just one bash script and `jq`.
 
 ```
-📁 norm.ai  🌿 main  🤖 Opus 4.7 (1M context)  v2.x
 🧐 smart zone │ 84k/1M (8%) ████░░░░░░░░░░░░░░░░ │ ⏱ 23m
+📁 norm.ai  🌿 main  🤖 Opus 4.7 (1M context)  v2.x
 💰 $1.42 (─$3.67/h)  📊 18420 tpm
 ```
 
@@ -48,13 +48,7 @@ Thresholds are tuned per model family. See [Model thresholds](#model-thresholds)
 
 Three lines of statusline:
 
-**Line 1 — context**
-- 📁 current directory
-- 🌿 git branch (if in a repo)
-- 🤖 model display name
-- Claude Code version
-
-**Line 2 — the important one**
+**Line 1 — the important one**
 - Zone label (🧐 / 🥱 / 🤪) with color
 - Tokens used / window size, plus % of window
 - A 20-segment progress bar:
@@ -62,6 +56,12 @@ Three lines of statusline:
   - `▓` dim = safe headroom (same color as current zone)
   - `▒` red = the danger band past the dumb threshold
 - ⏱ session elapsed time
+
+**Line 2 — context**
+- 📁 current directory
+- 🌿 git branch (if in a repo)
+- 🤖 model display name
+- Claude Code version
 
 **Line 3 — cost & throughput**
 - 💰 total session cost in USD
