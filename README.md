@@ -23,7 +23,7 @@ As your conversation fills the window, attention dilutes, retrieval over the pro
 - "fixing" things that weren't broken,
 - inventing APIs that don't exist.
 
-The community calls this **the dumb zone**. The [Dictionary of AI Coding](https://dictionary-of-ai-coding.com/) anchors the threshold around **~100k tokens for frontier models** — but everyone agrees the exact number is model-dependent and debated:
+The community calls this **the dumb zone**. The [Dictionary of AI Coding](https://github.com/mattpocock/dictionary-of-ai-coding) anchors the threshold around **~100k tokens for frontier models** — but everyone agrees the exact number is model-dependent and debated:
 
 - **Sonnet** starts drifting earlier.
 - **Opus** holds longer.
@@ -163,7 +163,7 @@ Total cold runtime: typically <50 ms.
 ## Prior art / inspiration
 
 - [`chongdashu/cc-statusline`](https://github.com/chongdashu/cc-statusline) — a more configurable, npm-distributed Claude Code statusline generator. Used as a structural reference; this repo is a single-file, opinionated take focused on the dumb-zone concept.
-- The [Dictionary of AI Coding](https://dictionary-of-ai-coding.com/) entry on the dumb zone.
+- The [Dictionary of AI Coding](https://github.com/mattpocock/dictionary-of-ai-coding) entry on the dumb zone.
 
 ---
 
