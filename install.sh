@@ -16,6 +16,37 @@ for arg in "$@"; do
   [ "$arg" = "--force" ] && FORCE=1
 done
 
+_jq_install_hint() {
+  local os
+  os="$(uname -s 2>/dev/null || true)"
+  if [ "$os" = "Darwin" ]; then
+    printf 'brew install jq'
+    return
+  fi
+  if [ -n "${MSYSTEM:-}" ]; then
+    printf 'winget install jqlang.jq'
+    return
+  fi
+  if command -v apt-get >/dev/null 2>&1; then
+    printf 'apt-get install -y jq'
+  elif command -v dnf >/dev/null 2>&1; then
+    printf 'dnf install -y jq'
+  elif command -v pacman >/dev/null 2>&1; then
+    printf 'pacman -S jq'
+  elif command -v apk >/dev/null 2>&1; then
+    printf 'apk add jq'
+  else
+    printf 'apt-get install -y jq  # or: dnf install -y jq / pacman -S jq / apk add jq'
+  fi
+}
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "[jq-check] jq not found. Install with:" >&2
+  echo "  $(_jq_install_hint)" >&2
+  echo "[jq-check] Aborting." >&2
+  exit 1
+fi
+
 mkdir -p "$CLAUDE_DIR"
 
 if [ -n "${SOURCE:-}" ]; then
@@ -33,10 +64,6 @@ else
   fi
 fi
 chmod +x "$TARGET"
-
-if ! command -v jq >/dev/null 2>&1; then
-  echo "[jq-check] jq not found — install it (brew install jq / apt install jq / winget install jqlang.jq). Required at runtime." >&2
-fi
 
 DESIRED_COMMAND="bash $TARGET"
 NEW_STATUSLINE='{
