@@ -1,4 +1,4 @@
-# cc-dumb-zone-statusline
+# Claude Code dumb zone statusline.sh
 
 **Know when your Claude Code session is about to get dumb — before you waste an hour wondering why it keeps making the same mistake.**
 
@@ -8,11 +8,7 @@
 
 A three-line statusline for [Claude Code](https://github.com/anthropics/claude-code) that color-codes your context usage against **model-aware "dumb zone" thresholds** — so you can `/clear` *before* quality degrades, not after.
 
-```
-🧐 smart zone │ 84k/1M (8%) ████░░░░░░░░░░░░░░░░ │ ⏱ 23m
-📁 norm.ai  🌿 main  🤖 Opus 4.7 (1M context)  v2.x
-💰 $1.42 ($3.67/h)  📊 18,420 tpm
-```
+<img width="597" height="58" alt="drifting" src="https://github.com/user-attachments/assets/9056fc78-4082-479b-bae8-55504d6e5db1" />
 
 One bash script. No Node, no npm, no config. Cross-platform (macOS, Linux, Windows), one-liner install, automatic `settings.json` patch with backup, validated end-to-end before it tells you "Done".
 
