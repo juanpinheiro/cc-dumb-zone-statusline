@@ -13,6 +13,39 @@ SETTINGS_TMP="$CLAUDE_DIR/settings.json.tmp"
 # Source the validator (supports both local SOURCE= runs and post-download runs).
 # When SOURCE= is set, we load it from the repo's lib/ alongside SOURCE.
 # Otherwise it was downloaded alongside statusline.sh into $LIB_DIR.
+_resolve_bash_command() {
+  local target="$1"
+  local is_windows=0
+  if [ -n "${MSYSTEM:-}" ]; then
+    is_windows=1
+  else
+    local uname_s
+    uname_s="$(uname -s 2>/dev/null || true)"
+    case "$uname_s" in
+      MINGW*|MSYS*) is_windows=1 ;;
+    esac
+  fi
+
+  if [ "$is_windows" -eq 0 ]; then
+    printf 'bash %s' "$target"
+    return 0
+  fi
+
+  if cmd.exe //c "bash --version" >/dev/null 2>&1; then
+    printf 'bash %s' "$target"
+    return 0
+  fi
+
+  local bash_path
+  if [ -n "${BASH:-}" ]; then
+    bash_path="$BASH"
+  else
+    bash_path="$(command -v bash 2>/dev/null || true)"
+  fi
+  echo "[runtime-check] WARNING: bash not on cmd.exe PATH, using absolute path: $bash_path" >&2
+  printf '"%s" "%s"' "$bash_path" "$target"
+}
+
 _load_validator() {
   local validator_path
   if [ -n "${SOURCE:-}" ]; then
@@ -89,7 +122,7 @@ if [ "$UNINSTALL" = "1" ]; then
     echo "[uninstall] No $SETTINGS to clean up."
   else
     EXISTING_CMD="$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null || true)"
-    DESIRED_COMMAND="bash $TARGET"
+    DESIRED_COMMAND="$(_resolve_bash_command "$TARGET")"
 
     if [ -z "$EXISTING_CMD" ]; then
       echo "[uninstall] No statusLine in $SETTINGS — nothing to remove."
@@ -160,12 +193,8 @@ chmod +x "$TARGET"
 
 _load_validator
 
-DESIRED_COMMAND="bash $TARGET"
-NEW_STATUSLINE='{
-  "type": "command",
-  "command": "bash '"$TARGET"'",
-  "padding": 0
-}'
+DESIRED_COMMAND="$(_resolve_bash_command "$TARGET")"
+NEW_STATUSLINE="$(jq -n --arg cmd "$DESIRED_COMMAND" '{"type":"command","command":$cmd,"padding":0}')"
 
 if [ ! -f "$SETTINGS" ]; then
   _write_settings "$(jq -n --argjson sl "$NEW_STATUSLINE" '{"statusLine": $sl}')"
