@@ -35,3 +35,9 @@ if [ "$NONEMPTY" -ne 3 ]; then
 fi
 
 echo "OK: statusline produces 3 non-empty lines"
+
+echo "→ Running unit tests"
+for unit in "$TESTS_DIR/unit"/*.sh; do
+  bash "$unit" || { echo "FAIL: $unit exited non-zero"; exit 1; }
+done
+echo "OK: all unit tests passed"
