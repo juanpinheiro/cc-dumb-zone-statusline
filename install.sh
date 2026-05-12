@@ -171,8 +171,23 @@ if [ -n "${SOURCE:-}" ]; then
   echo "[download] Copying lib/ from $SOURCE_DIR/lib to $LIB_DIR"
   cp "$SOURCE_DIR/lib/"*.sh "$LIB_DIR/"
 else
-  # shellcheck source=/dev/null
-  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/resolve_release.sh"
+  # Inlined so curl|bash and the PowerShell wrapper (both run install.sh from
+  # a tempfile with no sibling lib/) can resolve a ref before downloading lib/.
+  resolve_release_ref() {
+    local api_url="$1"
+    if [ -n "${VERSION:-}" ]; then
+      printf '%s' "$VERSION"
+      return 0
+    fi
+    local tag
+    tag="$(curl -fsSL "$api_url" 2>/dev/null | jq -r '.tag_name // empty' 2>/dev/null || true)"
+    if [ -z "$tag" ]; then
+      echo "[download] No releases found, falling back to main branch." >&2
+      printf '%s' "main"
+      return 0
+    fi
+    printf '%s' "$tag"
+  }
   _RESOLVED_REF="$(resolve_release_ref "$_RELEASES_API")"
   echo "[download] Installing from ref: $_RESOLVED_REF"
   REPO_URL="https://raw.githubusercontent.com/juanpinheiro/cc-dumb-zone-statusline/$_RESOLVED_REF"
