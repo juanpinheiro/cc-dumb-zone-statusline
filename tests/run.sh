@@ -9,7 +9,7 @@ FAIL=0
 TMPDIRS=()
 
 _cleanup() {
-  for d in "${TMPDIRS[@]}"; do
+  for d in ${TMPDIRS[@]+"${TMPDIRS[@]}"}; do
     rm -rf "$d"
   done
 }
@@ -264,28 +264,25 @@ FAKE_HOME_6="$(_mktmp)"
 
 echo "→ Scenario 6: jq missing → precheck aborts"
 
-FAKE_BIN_6="$FAKE_HOME_6/bin"
-mkdir -p "$FAKE_BIN_6"
+SHIM_BIN_6="$FAKE_HOME_6/shim-bin"
+mkdir -p "$SHIM_BIN_6"
 
-JQ_DIRS=""
+# Build an isolated PATH dir: symlink every executable from the current PATH
+# except jq. Lets the installer run normally and fail only on its jq lookup.
 IFS=: read -ra PATH_PARTS <<< "$PATH"
 for part in "${PATH_PARTS[@]}"; do
-  [ -x "$part/jq" ] && JQ_DIRS="${JQ_DIRS:+$JQ_DIRS:}$part"
-done
-
-PATH_NO_JQ=""
-IFS=: read -ra PATH_PARTS <<< "$PATH"
-for part in "${PATH_PARTS[@]}"; do
-  [ -z "$part" ] && continue
-  _skip=0
-  IFS=: read -ra JQ_DIRS_ARR <<< "$JQ_DIRS"
-  for jqd in "${JQ_DIRS_ARR[@]}"; do
-    [ "$part" = "$jqd" ] && { _skip=1; break; }
+  [ -d "$part" ] || continue
+  for f in "$part"/*; do
+    [ -e "$f" ] || continue
+    name="$(basename "$f")"
+    case "$name" in
+      jq|jq.exe) continue ;;
+    esac
+    [ -e "$SHIM_BIN_6/$name" ] && continue
+    ln -s "$f" "$SHIM_BIN_6/$name" 2>/dev/null || true
   done
-  [ "$_skip" = "1" ] && continue
-  PATH_NO_JQ="${PATH_NO_JQ:+$PATH_NO_JQ:}$part"
 done
-PATH_NO_JQ="$FAKE_BIN_6:$PATH_NO_JQ"
+PATH_NO_JQ="$SHIM_BIN_6"
 
 INSTALL_ERR_6="$FAKE_HOME_6/install.err"
 EXIT_CODE_6=0
