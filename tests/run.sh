@@ -447,6 +447,76 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario 8 — resolve_release_ref helper
+# ---------------------------------------------------------------------------
+echo "→ Scenario 8: resolve_release_ref"
+
+# shellcheck source=/dev/null
+source "$REPO_DIR/lib/resolve_release.sh"
+
+# 8a-i: VERSION= env var → returned as-is, no curl needed
+RESULT_8AI="$(VERSION="v1.2.3" resolve_release_ref "https://this-should-not-be-called.invalid")"
+if [ "$RESULT_8AI" = "v1.2.3" ]; then
+  _pass "scenario 8a-i: VERSION= env var returned verbatim"
+else
+  _fail "scenario 8a-i: expected 'v1.2.3', got '$RESULT_8AI'"
+fi
+
+# Helper: create a shim bin dir with a curl that emits a fixed response body.
+_make_curl_shim() {
+  local shim_dir="$1"
+  local response_body="$2"
+  mkdir -p "$shim_dir"
+  cat > "$shim_dir/curl" <<EOF
+#!/bin/bash
+printf '%s' '${response_body}'
+exit 0
+EOF
+  chmod +x "$shim_dir/curl"
+}
+
+# 8a-ii: API returns empty/no tag_name → falls back to "main" with warning
+SHIM_8AII="$(_mktmp)"
+_make_curl_shim "$SHIM_8AII" '{}'
+WARN_8AII_FILE="$(_mktmp)/warn.txt"
+RESULT_8AII="$(VERSION="" PATH="$SHIM_8AII:$PATH" resolve_release_ref "https://fake.invalid" 2>"$WARN_8AII_FILE" || true)"
+if [ "$RESULT_8AII" = "main" ]; then
+  _pass "scenario 8a-ii: no tag_name → falls back to main"
+else
+  _fail "scenario 8a-ii: expected 'main', got '$RESULT_8AII'"
+fi
+if grep -q '\[download\]' "$WARN_8AII_FILE"; then
+  _pass "scenario 8a-ii: fallback warning printed"
+else
+  _fail "scenario 8a-ii: expected [download] warning on fallback"
+fi
+
+# 8a-iii: API returns a tag_name → that tag is returned
+SHIM_8AIII="$(_mktmp)"
+_make_curl_shim "$SHIM_8AIII" '{"tag_name": "v9.9.9"}'
+RESULT_8AIII="$(VERSION="" PATH="$SHIM_8AIII:$PATH" resolve_release_ref "https://fake.invalid")"
+if [ "$RESULT_8AIII" = "v9.9.9" ]; then
+  _pass "scenario 8a-iii: tag_name from API response returned"
+else
+  _fail "scenario 8a-iii: expected 'v9.9.9', got '$RESULT_8AIII'"
+fi
+
+# 8b — live API (only in CI with network, skip gracefully otherwise)
+if [ "${CI:-}" = "true" ]; then
+  echo "→ Scenario 8b: live GitHub releases API"
+  LIVE_REF="$(VERSION="" resolve_release_ref \
+    "https://api.github.com/repos/juanpinheiro/cc-dumb-zone-statusline/releases/latest" \
+    2>/dev/null || true)"
+  if [ -n "$LIVE_REF" ]; then
+    _pass "scenario 8b: live API returned non-empty ref ('$LIVE_REF')"
+  else
+    _fail "scenario 8b: live API returned empty ref"
+  fi
+else
+  echo "  (scenario 8b skipped — not in CI)"
+fi
+
+# ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
 echo "→ Running unit tests"
