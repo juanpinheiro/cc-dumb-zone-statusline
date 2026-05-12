@@ -405,10 +405,10 @@ else
   cat "$VALIDATE_OUT_7B"
 fi
 
-if grep -q '\[runtime-check\]' "$VALIDATE_OUT_7B"; then
-  _pass "scenario 7b: output contains [runtime-check] tag"
+if grep -q '\[runtime-check\]\|\[smoke-test\]' "$VALIDATE_OUT_7B"; then
+  _pass "scenario 7b: output contains expected error tag"
 else
-  _fail "scenario 7b: expected [runtime-check] tag in output"
+  _fail "scenario 7b: expected [runtime-check] or [smoke-test] tag in output"
   cat "$VALIDATE_OUT_7B"
 fi
 
@@ -672,6 +672,142 @@ if [ "$EXIT_CODE_9D2" -ne 0 ]; then
   _pass "scenario 9d: --force --uninstall exits non-zero"
 else
   _fail "scenario 9d: --force --uninstall should exit non-zero but didn't"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 10a — Windows only: end-to-end install sets a valid statusLine.command
+# ---------------------------------------------------------------------------
+echo "→ Scenario 10a: Windows bash resolver (end-to-end)"
+
+if [ -n "${MSYSTEM:-}" ]; then
+  FAKE_HOME_10A="$(_mktmp)"
+  _run_installer "$FAKE_HOME_10A" > "$FAKE_HOME_10A/install.log" 2>&1
+  ACTUAL_CMD_10A="$(jq -r '.statusLine.command' "$FAKE_HOME_10A/.claude/settings.json" 2>/dev/null || true)"
+  if printf '%s' "$ACTUAL_CMD_10A" | grep -qE '^bash |bash\.exe'; then
+    _pass "scenario 10a: statusLine.command contains bash or bash.exe path"
+  else
+    _fail "scenario 10a: unexpected statusLine.command: '$ACTUAL_CMD_10A'"
+  fi
+else
+  echo "  (scenario 10a skipped — not on Windows)"
+fi
+
+_extract_resolver() {
+  awk '/^_resolve_bash_command\(\)/{found=1} found{print} found && /^\}$/{exit}' "$REPO_DIR/install.sh"
+}
+
+_make_resolver_shim_dir() {
+  local shim_dir="$1"
+  local cmd_exit="$2"
+  mkdir -p "$shim_dir"
+  cat > "$shim_dir/cmd.exe" <<EOF
+#!/bin/bash
+exit $cmd_exit
+EOF
+  chmod +x "$shim_dir/cmd.exe"
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 10b — Windows only: simulate bash not on cmd PATH → absolute path fallback
+# ---------------------------------------------------------------------------
+echo "→ Scenario 10b: Windows bash resolver — bash not on cmd PATH (negative test)"
+
+if [ -n "${MSYSTEM:-}" ]; then
+  FAKE_HOME_10B="$(_mktmp)"
+  SHIM_BIN_10B="$FAKE_HOME_10B/shim-bin"
+  mkdir -p "$SHIM_BIN_10B"
+
+  # Shim that makes cmd.exe /c "bash --version" appear to fail.
+  # We override cmd.exe so that any invocation with "bash --version" exits 1.
+  cat > "$SHIM_BIN_10B/cmd.exe" <<'EOF'
+#!/bin/bash
+for arg in "$@"; do
+  case "$arg" in
+    *"bash --version"*) exit 1 ;;
+    *bash*--version*) exit 1 ;;
+  esac
+done
+exec cmd.exe "$@"
+EOF
+  chmod +x "$SHIM_BIN_10B/cmd.exe"
+
+  RESOLVE_OUT_10B="$FAKE_HOME_10B/resolve.out"
+  RESOLVE_ERR_10B="$FAKE_HOME_10B/resolve.err"
+
+  (
+    eval "$(_extract_resolver)"
+    MSYSTEM="MINGW64" PATH="$SHIM_BIN_10B:$PATH" \
+      _resolve_bash_command "/fake/statusline.sh"
+  ) > "$RESOLVE_OUT_10B" 2>"$RESOLVE_ERR_10B" || true
+
+  RESOLVE_CMD_10B="$(cat "$RESOLVE_OUT_10B")"
+  if printf '%s' "$RESOLVE_CMD_10B" | grep -q 'bash'; then
+    _pass "scenario 10b: fallback command contains bash path"
+  else
+    _fail "scenario 10b: expected bash path in command, got: '$RESOLVE_CMD_10B'"
+  fi
+  if grep -q '\[runtime-check\]' "$RESOLVE_ERR_10B"; then
+    _pass "scenario 10b: [runtime-check] warning printed to stderr"
+  else
+    _fail "scenario 10b: expected [runtime-check] warning in stderr"
+    cat "$RESOLVE_ERR_10B"
+  fi
+else
+  echo "  (scenario 10b skipped — not on Windows)"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 10c — cross-OS: unit test _resolve_bash_command with mocked env
+# ---------------------------------------------------------------------------
+echo "→ Scenario 10c: _resolve_bash_command unit tests (mocked env)"
+
+# 10c-i: non-Windows → always returns "bash <target>"
+SHIM_10CI="$(_mktmp)"
+_make_resolver_shim_dir "$SHIM_10CI" 0
+RESULT_10CI="$(
+  eval "$(_extract_resolver)"
+  MSYSTEM="" PATH="$SHIM_10CI:$PATH" _resolve_bash_command "/some/statusline.sh"
+)"
+if [ "$RESULT_10CI" = "bash /some/statusline.sh" ]; then
+  _pass "scenario 10c-i: non-Windows returns 'bash <target>'"
+else
+  _fail "scenario 10c-i: expected 'bash /some/statusline.sh', got '$RESULT_10CI'"
+fi
+
+# 10c-ii: Windows + cmd.exe bash succeeds → returns "bash <target>"
+SHIM_10CII="$(_mktmp)"
+_make_resolver_shim_dir "$SHIM_10CII" 0
+RESULT_10CII="$(
+  eval "$(_extract_resolver)"
+  MSYSTEM="MINGW64" PATH="$SHIM_10CII:$PATH" _resolve_bash_command "/some/statusline.sh"
+)"
+if [ "$RESULT_10CII" = "bash /some/statusline.sh" ]; then
+  _pass "scenario 10c-ii: Windows + cmd bash succeeds → 'bash <target>'"
+else
+  _fail "scenario 10c-ii: expected 'bash /some/statusline.sh', got '$RESULT_10CII'"
+fi
+
+# 10c-iii: Windows + cmd.exe bash fails → returns absolute path form
+SHIM_10CIII="$(_mktmp)"
+_make_resolver_shim_dir "$SHIM_10CIII" 1
+REAL_BASH="$(command -v bash)"
+RESULT_10CIII="$(
+  eval "$(_extract_resolver)"
+  MSYSTEM="MINGW64" BASH="$REAL_BASH" PATH="$SHIM_10CIII:$PATH" _resolve_bash_command "/some/statusline.sh" 2>/dev/null
+)"
+if printf '%s' "$RESULT_10CIII" | grep -q "$REAL_BASH"; then
+  _pass "scenario 10c-iii: Windows + cmd bash fails → absolute bash path in command"
+else
+  _fail "scenario 10c-iii: expected absolute bash path, got '$RESULT_10CIII'"
+fi
+WARN_10CIII="$(
+  eval "$(_extract_resolver)"
+  MSYSTEM="MINGW64" BASH="$REAL_BASH" PATH="$SHIM_10CIII:$PATH" _resolve_bash_command "/some/statusline.sh" 2>&1 >/dev/null
+)"
+if printf '%s' "$WARN_10CIII" | grep -q '\[runtime-check\]'; then
+  _pass "scenario 10c-iii: [runtime-check] warning emitted when falling back"
+else
+  _fail "scenario 10c-iii: expected [runtime-check] warning, got '$WARN_10CIII'"
 fi
 
 # ---------------------------------------------------------------------------

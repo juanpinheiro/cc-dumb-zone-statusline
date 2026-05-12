@@ -23,10 +23,14 @@ validate_install() {
   fi
 
   local smoke_out
-  # TODO(#9): on Windows, Claude Code invokes this via cmd.exe /c "$cmd".
-  # Replace the line below with: smoke_out="$(cmd.exe /c "$cmd" < "$fixture" 2>&1)"
-  smoke_out="$(bash -c "$cmd" < "$fixture" 2>&1)"
-  local smoke_exit=$?
+  local smoke_exit
+  if [ -n "${MSYSTEM:-}" ]; then
+    smoke_out="$(cmd.exe //c "$cmd" < "$fixture" 2>&1)"
+    smoke_exit=$?
+  else
+    smoke_out="$(bash -c "$cmd" < "$fixture" 2>&1)"
+    smoke_exit=$?
+  fi
 
   local nonempty
   nonempty="$(printf '%s\n' "$smoke_out" | grep -cv '^[[:space:]]*$' || true)"
@@ -47,8 +51,16 @@ validate_install() {
   fi
 
   local script_path
-  # Extract everything after the leading "bash " prefix.
-  script_path="$(jq -r '.statusLine.command' "$settings" | sed 's/^bash //')"
+  local raw_cmd
+  raw_cmd="$(jq -r '.statusLine.command' "$settings")"
+  # Handle two command forms:
+  #   bash /path/to/statusline.sh          (non-Windows or bash-on-PATH)
+  #   "/path/to/bash.exe" "/path/to/statusline.sh"  (Windows absolute-path form)
+  if printf '%s' "$raw_cmd" | grep -q '^"'; then
+    script_path="$(printf '%s' "$raw_cmd" | sed 's/^"[^"]*" "//' | sed 's/"$//')"
+  else
+    script_path="$(printf '%s' "$raw_cmd" | sed 's/^bash //')"
+  fi
 
   if [ -z "$script_path" ]; then
     echo "[runtime-check] ERROR: could not parse script path from statusLine.command in $settings" >&2
