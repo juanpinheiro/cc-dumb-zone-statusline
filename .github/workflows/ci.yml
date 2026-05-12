@@ -35,3 +35,45 @@ jobs:
 
       - name: Run tests
         run: bash tests/run.sh
+
+  windows-ps1-happy-path:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq (Windows)
+        shell: bash
+        run: |
+          command -v jq >/dev/null || choco install jq -y
+
+      - name: Run install.ps1 against a fake HOME
+        shell: pwsh
+        run: |
+          $fakeHome = Join-Path $env:RUNNER_TEMP 'fake-home'
+          New-Item -ItemType Directory -Force -Path $fakeHome | Out-Null
+          $env:USERPROFILE = $fakeHome
+          $env:HOME        = $fakeHome
+          $env:CLAUDE_CONFIG_DIR = Join-Path $fakeHome '.claude'
+          # Run the wrapper; it will download and run install.sh via Git Bash (available on windows-latest).
+          & powershell.exe -File "$env:GITHUB_WORKSPACE\install.ps1"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "install.ps1 exited with code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+      - name: Verify statusline.sh was installed
+        shell: pwsh
+        run: |
+          $fakeHome = Join-Path $env:RUNNER_TEMP 'fake-home'
+          $target   = Join-Path $fakeHome '.claude\statusline.sh'
+          if (-not (Test-Path $target)) {
+            Write-Error "statusline.sh not found at $target"
+            exit 1
+          }
+          Write-Host "install.ps1 happy-path: OK"
+
+  # windows-ps1-no-bash:
+  #   Skipped: reliably removing Git Bash and WSL from the windows-latest runner
+  #   without breaking other tooling is too invasive for a CI job. The no-bash
+  #   code path in install.ps1 is a trivial exit-1 after the candidate loop and
+  #   is covered by code review rather than automated CI.
