@@ -258,6 +258,70 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario 6 — jq missing → precheck aborts, no files written
+# ---------------------------------------------------------------------------
+FAKE_HOME_6="$(_mktmp)"
+
+echo "→ Scenario 6: jq missing → precheck aborts"
+
+FAKE_BIN_6="$FAKE_HOME_6/bin"
+mkdir -p "$FAKE_BIN_6"
+
+JQ_DIRS=""
+IFS=: read -ra PATH_PARTS <<< "$PATH"
+for part in "${PATH_PARTS[@]}"; do
+  [ -x "$part/jq" ] && JQ_DIRS="${JQ_DIRS:+$JQ_DIRS:}$part"
+done
+
+PATH_NO_JQ=""
+IFS=: read -ra PATH_PARTS <<< "$PATH"
+for part in "${PATH_PARTS[@]}"; do
+  [ -z "$part" ] && continue
+  _skip=0
+  IFS=: read -ra JQ_DIRS_ARR <<< "$JQ_DIRS"
+  for jqd in "${JQ_DIRS_ARR[@]}"; do
+    [ "$part" = "$jqd" ] && { _skip=1; break; }
+  done
+  [ "$_skip" = "1" ] && continue
+  PATH_NO_JQ="${PATH_NO_JQ:+$PATH_NO_JQ:}$part"
+done
+PATH_NO_JQ="$FAKE_BIN_6:$PATH_NO_JQ"
+
+INSTALL_ERR_6="$FAKE_HOME_6/install.err"
+EXIT_CODE_6=0
+HOME="$FAKE_HOME_6" \
+CLAUDE_CONFIG_DIR="$FAKE_HOME_6/.claude" \
+SOURCE="$REPO_DIR/statusline.sh" \
+PATH="$PATH_NO_JQ" \
+  bash "$REPO_DIR/install.sh" > "$FAKE_HOME_6/install.out" 2>"$INSTALL_ERR_6" || EXIT_CODE_6=$?
+
+if [ "$EXIT_CODE_6" -ne 0 ]; then
+  _pass "scenario 6: installer exited non-zero when jq missing"
+else
+  _fail "scenario 6: installer should have exited non-zero but didn't"
+fi
+
+if grep -q '\[jq-check\]' "$INSTALL_ERR_6"; then
+  _pass "scenario 6: stderr contains [jq-check]"
+else
+  _fail "scenario 6: stderr missing [jq-check]"
+  cat "$INSTALL_ERR_6"
+fi
+
+if grep -qE 'brew install jq|apt|dnf|pacman|apk|winget' "$INSTALL_ERR_6"; then
+  _pass "scenario 6: stderr contains an install command hint"
+else
+  _fail "scenario 6: stderr missing install command hint"
+  cat "$INSTALL_ERR_6"
+fi
+
+if [ ! -f "$FAKE_HOME_6/.claude/statusline.sh" ]; then
+  _pass "scenario 6: no statusline.sh written on abort"
+else
+  _fail "scenario 6: statusline.sh was created despite precheck failure"
+fi
+
+# ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
 echo "→ Running unit tests"
@@ -268,7 +332,6 @@ for unit in "$TESTS_DIR/unit"/*.sh; do
     _fail "unit: $(basename "$unit") exited non-zero"
   fi
 done
-
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
