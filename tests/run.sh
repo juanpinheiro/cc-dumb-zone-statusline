@@ -6,6 +6,21 @@ REPO_DIR="$(cd "$TESTS_DIR/.." && pwd)"
 
 PASS=0
 FAIL=0
+TMPDIRS=()
+
+_cleanup() {
+  for d in "${TMPDIRS[@]}"; do
+    rm -rf "$d"
+  done
+}
+trap _cleanup EXIT
+
+_mktmp() {
+  local d
+  d="$(mktemp -d)"
+  TMPDIRS+=("$d")
+  printf '%s' "$d"
+}
 
 _pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 _fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
@@ -22,8 +37,7 @@ _run_installer() {
 # ---------------------------------------------------------------------------
 # Scenario 0 — original smoke test
 # ---------------------------------------------------------------------------
-FAKE_HOME_0="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_0"' EXIT
+FAKE_HOME_0="$(_mktmp)"
 
 echo "→ Scenario 0: smoke test (install + statusline output)"
 
@@ -49,8 +63,7 @@ fi
 # ---------------------------------------------------------------------------
 # Scenario 1 — no prior settings.json → file created with statusLine
 # ---------------------------------------------------------------------------
-FAKE_HOME_1="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_1"' EXIT
+FAKE_HOME_1="$(_mktmp)"
 
 echo "→ Scenario 1: no prior settings.json"
 
@@ -76,8 +89,7 @@ fi
 # ---------------------------------------------------------------------------
 # Scenario 2 — prior settings.json with unrelated keys → merge + .bak
 # ---------------------------------------------------------------------------
-FAKE_HOME_2="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_2"' EXIT
+FAKE_HOME_2="$(_mktmp)"
 
 echo "→ Scenario 2: prior settings.json with unrelated keys"
 
@@ -110,8 +122,7 @@ fi
 # ---------------------------------------------------------------------------
 # Scenario 3 — idempotent re-run → no new .bak
 # ---------------------------------------------------------------------------
-FAKE_HOME_3="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_3"' EXIT
+FAKE_HOME_3="$(_mktmp)"
 
 echo "→ Scenario 3: idempotent re-run"
 
@@ -141,8 +152,7 @@ fi
 # ---------------------------------------------------------------------------
 # Scenario 4 — foreign statusLine → abort with [patch] error
 # ---------------------------------------------------------------------------
-FAKE_HOME_4="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_4"' EXIT
+FAKE_HOME_4="$(_mktmp)"
 
 echo "→ Scenario 4: foreign statusLine → abort"
 
@@ -177,8 +187,7 @@ fi
 # ---------------------------------------------------------------------------
 # Scenario 5a — FORCE=1 env var overrides foreign statusLine
 # ---------------------------------------------------------------------------
-FAKE_HOME_5A="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_5A"' EXIT
+FAKE_HOME_5A="$(_mktmp)"
 
 echo "→ Scenario 5a: FORCE=1 env var overrides foreign statusLine"
 
@@ -215,8 +224,7 @@ fi
 # ---------------------------------------------------------------------------
 # Scenario 5b — --force flag overrides foreign statusLine
 # ---------------------------------------------------------------------------
-FAKE_HOME_5B="$(mktemp -d)"
-trap 'rm -rf "$FAKE_HOME_5B"' EXIT
+FAKE_HOME_5B="$(_mktmp)"
 
 echo "→ Scenario 5b: --force flag overrides foreign statusLine"
 
