@@ -317,6 +317,136 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario 7a — smoke-test failure: statusline stub emits no output
+# ---------------------------------------------------------------------------
+# Strategy: set SOURCE= to a stub statusline that exits 0 but emits nothing.
+# The installer installs that stub, then runs validate_install → smoke-test
+# expects 3 non-empty lines but gets 0 → should exit non-zero with [smoke-test].
+FAKE_HOME_7A="$(_mktmp)"
+
+echo "→ Scenario 7a: smoke-test failure (stub emits no output)"
+
+STUB_DIR_7A="$(_mktmp)"
+STUB_SH_7A="$STUB_DIR_7A/statusline.sh"
+mkdir -p "$STUB_DIR_7A/lib"
+cat > "$STUB_SH_7A" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+chmod +x "$STUB_SH_7A"
+
+# Provide stub lib scripts that are also no-ops (install.sh copies lib/*.sh).
+for f in parse_hook_input.sh classify_zone.sh render_lines.sh validate_install.sh; do
+  if [ -f "$REPO_DIR/lib/$f" ]; then
+    cp "$REPO_DIR/lib/$f" "$STUB_DIR_7A/lib/$f"
+  else
+    printf '#!/bin/bash\n' > "$STUB_DIR_7A/lib/$f"
+    chmod +x "$STUB_DIR_7A/lib/$f"
+  fi
+done
+# Overwrite validate_install.sh with the real one (we want the real validator).
+cp "$REPO_DIR/lib/validate_install.sh" "$STUB_DIR_7A/lib/validate_install.sh"
+
+INSTALL_OUT_7A="$FAKE_HOME_7A/install.log"
+EXIT_CODE_7A=0
+HOME="$FAKE_HOME_7A" \
+CLAUDE_CONFIG_DIR="$FAKE_HOME_7A/.claude" \
+SOURCE="$STUB_SH_7A" \
+TESTS_DIR_FOR_VALIDATOR="$TESTS_DIR/fixtures/hook-input.json" \
+  bash "$REPO_DIR/install.sh" > "$INSTALL_OUT_7A" 2>&1 || EXIT_CODE_7A=$?
+
+if [ "$EXIT_CODE_7A" -ne 0 ]; then
+  _pass "scenario 7a: installer exited non-zero on empty statusline output"
+else
+  _fail "scenario 7a: installer should have exited non-zero but didn't"
+  cat "$INSTALL_OUT_7A"
+fi
+
+if grep -q '\[smoke-test\]' "$INSTALL_OUT_7A"; then
+  _pass "scenario 7a: output contains [smoke-test] tag"
+else
+  _fail "scenario 7a: expected [smoke-test] tag in output"
+  cat "$INSTALL_OUT_7A"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 7b — runtime-check failure: command path does not exist
+# ---------------------------------------------------------------------------
+# Strategy: craft a settings.json whose command produces 3 lines (Stage 1
+# passes) but whose parsed path — everything after "bash " — does not exist
+# as a file (Stage 2 fails with [runtime-check]).
+# Command: "bash -c 'printf \"line1\nline2\nline3\n\"'" passes Stage 1
+# (3 non-empty lines), but "-c 'printf...'" is not a real file → Stage 2 fails.
+FAKE_HOME_7B="$(_mktmp)"
+
+echo "→ Scenario 7b: runtime-check failure (script path does not exist)"
+
+SETTINGS_7B="$FAKE_HOME_7B/settings.json"
+FIXTURE_7B="$TESTS_DIR/fixtures/hook-input.json"
+# Use jq to write valid JSON; the command passes Stage 1 (3 non-empty lines)
+# but the parsed script path ("-c \"printf...\"") does not exist → Stage 2 fails.
+jq -n '{"statusLine":{"type":"command","command":"bash -c \"printf \\\"line1\\\\nline2\\\\nline3\\\\n\\\"\"","padding":0}}' \
+  > "$SETTINGS_7B"
+
+# Source the validator and call it directly.
+# We must wrap in a subshell to avoid `set -e` killing the test runner on failure.
+VALIDATE_OUT_7B="$FAKE_HOME_7B/validate.log"
+EXIT_CODE_7B=0
+(
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/validate_install.sh"
+  validate_install "$SETTINGS_7B" "$FIXTURE_7B"
+) > "$VALIDATE_OUT_7B" 2>&1 || EXIT_CODE_7B=$?
+
+if [ "$EXIT_CODE_7B" -ne 0 ]; then
+  _pass "scenario 7b: validate_install exited non-zero on missing script path"
+else
+  _fail "scenario 7b: validate_install should have exited non-zero but didn't"
+  cat "$VALIDATE_OUT_7B"
+fi
+
+if grep -q '\[runtime-check\]' "$VALIDATE_OUT_7B"; then
+  _pass "scenario 7b: output contains [runtime-check] tag"
+else
+  _fail "scenario 7b: expected [runtime-check] tag in output"
+  cat "$VALIDATE_OUT_7B"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 7c — runtime-check failure: settings.json is malformed JSON
+# ---------------------------------------------------------------------------
+# Strategy: source validate_install.sh directly with a malformed settings.json.
+FAKE_HOME_7C="$(_mktmp)"
+
+echo "→ Scenario 7c: runtime-check failure (malformed settings.json)"
+
+SETTINGS_7C="$FAKE_HOME_7C/settings.json"
+FIXTURE_7C="$TESTS_DIR/fixtures/hook-input.json"
+printf 'THIS IS NOT JSON\n' > "$SETTINGS_7C"
+
+VALIDATE_OUT_7C="$FAKE_HOME_7C/validate.log"
+EXIT_CODE_7C=0
+(
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/validate_install.sh"
+  validate_install "$SETTINGS_7C" "$FIXTURE_7C"
+) > "$VALIDATE_OUT_7C" 2>&1 || EXIT_CODE_7C=$?
+
+if [ "$EXIT_CODE_7C" -ne 0 ]; then
+  _pass "scenario 7c: validate_install exited non-zero on malformed JSON"
+else
+  _fail "scenario 7c: validate_install should have exited non-zero but didn't"
+  cat "$VALIDATE_OUT_7C"
+fi
+
+if grep -q '\[smoke-test\]\|\[runtime-check\]' "$VALIDATE_OUT_7C"; then
+  _pass "scenario 7c: output contains expected error tag"
+else
+  _fail "scenario 7c: expected [smoke-test] or [runtime-check] tag in output"
+  cat "$VALIDATE_OUT_7C"
+fi
+
+# ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
 echo "→ Running unit tests"
