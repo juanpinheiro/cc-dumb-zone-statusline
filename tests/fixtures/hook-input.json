@@ -1,0 +1,26 @@
+{
+  "model": {
+    "display_name": "Opus 4.7",
+    "id": "claude-opus-4-7[1m]"
+  },
+  "version": "1.0.0",
+  "transcript_path": "",
+  "workspace": {
+    "current_dir": "/tmp/example-project"
+  },
+  "cwd": "/tmp/example-project",
+  "context_window": {
+    "used_percentage": 12.5,
+    "current_usage": {
+      "input_tokens": 5000,
+      "cache_creation_input_tokens": 1000,
+      "cache_read_input_tokens": 20000
+    },
+    "total_input_tokens": 50000,
+    "total_output_tokens": 8000
+  },
+  "cost": {
+    "total_cost_usd": 0.42,
+    "total_duration_ms": 600000
+  }
+}

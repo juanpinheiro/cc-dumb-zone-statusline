@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          command -v jq >/dev/null || sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install jq (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          command -v jq >/dev/null || brew install jq
+
+      - name: Install jq (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          command -v jq >/dev/null || choco install jq -y
+
+      - name: Run tests
+        run: bash tests/run.sh

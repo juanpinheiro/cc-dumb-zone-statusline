@@ -9,16 +9,28 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 
 mkdir -p "$CLAUDE_DIR"
 
-echo "→ Downloading statusline.sh to $TARGET"
-curl -fsSL "$SCRIPT_URL" -o "$TARGET"
+if [ -n "${SOURCE:-}" ]; then
+  if [ ! -f "$SOURCE" ]; then
+    echo "[download] SOURCE='$SOURCE' is not a readable file" >&2
+    exit 1
+  fi
+  echo "[download] Copying statusline.sh from $SOURCE to $TARGET"
+  cp "$SOURCE" "$TARGET"
+else
+  echo "[download] Fetching statusline.sh to $TARGET"
+  if ! curl -fsSL "$SCRIPT_URL" -o "$TARGET"; then
+    echo "[download] Failed to fetch $SCRIPT_URL" >&2
+    exit 1
+  fi
+fi
 chmod +x "$TARGET"
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo "⚠  jq not found. Install it (brew install jq / apt install jq / choco install jq) — required."
+  echo "[jq-check] jq not found — install it (brew install jq / apt install jq / winget install jqlang.jq). Required at runtime." >&2
 fi
 
 echo
-echo "Now point Claude Code at the script. Add this to $SETTINGS:"
+echo "[install] Now point Claude Code at the script. Add this to $SETTINGS:"
 echo
 cat <<EOF
 {
@@ -30,4 +42,4 @@ cat <<EOF
 }
 EOF
 echo
-echo "Done. Restart Claude Code to see the statusline."
+echo "[install] Done. Restart Claude Code to see the statusline."
