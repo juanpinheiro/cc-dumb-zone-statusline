@@ -1,35 +1,12 @@
 #!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/parse_hook_input.sh"
+source "$SCRIPT_DIR/lib/classify_zone.sh"
+source "$SCRIPT_DIR/lib/render_lines.sh"
+
 input=$(cat)
 
-# ---- core extraction ----
-MODEL=$(echo "$input" | jq -r '.model.display_name // "Claude"')
-MODEL_ID=$(echo "$input" | jq -r '.model.id // ""')
-CC_VERSION=$(echo "$input" | jq -r '.version // ""')
-TRANSCRIPT=$(echo "$input" | jq -r '.transcript_path // ""')
-CWD=$(echo "$input" | jq -r '.workspace.current_dir // .cwd // ""')
-CWD_REAL="$CWD"
-CWD=$(basename "$CWD")
-
-# ---- context ----
-CTX_PCT=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
-CTX_PCT=${CTX_PCT:-0}
-CTX_TOKENS=$(echo "$input" | jq -r '((.context_window.current_usage.input_tokens // 0) + (.context_window.current_usage.cache_creation_input_tokens // 0) + (.context_window.current_usage.cache_read_input_tokens // 0))')
-
-# ---- I/O totals ----
-IN_TOKENS=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
-OUT_TOKENS=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
-CACHED_TOKENS=$(echo "$input" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
-IN_TOKENS=${IN_TOKENS:-0}
-OUT_TOKENS=${OUT_TOKENS:-0}
-CACHED_TOKENS=${CACHED_TOKENS:-0}
-CTX_TOKENS=${CTX_TOKENS:-0}
-TOTAL_IO=$((IN_TOKENS + OUT_TOKENS))
-
-# ---- cost & duration ----
-COST_USD=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
-DURATION_MS=$(echo "$input" | jq -r '.cost.total_duration_ms // 0')
-COST_USD=${COST_USD:-0}
-DURATION_MS=${DURATION_MS:-0}
+parse_hook_input "$input"
 
 # ---- colors (256-color palette) ----
 GREEN='\033[38;5;158m'; MINT='\033[38;5;150m'; YELLOW='\033[38;5;215m'
@@ -37,22 +14,9 @@ RED='\033[38;5;203m'; BLUE='\033[38;5;117m'; PURPLE='\033[38;5;147m'
 GOLD='\033[38;5;222m'; BURN='\033[38;5;220m'; LAV='\033[38;5;189m'
 GRAY='\033[38;5;245m'; DIM='\033[2m'; RESET='\033[0m'
 
-# ---- model-aware zone thresholds & window size ----
-# dictionary-of-ai-coding anchors dumb zone ~100k for "frontier models" but
-# admits debate; Opus holds longer than Sonnet, Opus 1M holds longer still.
-if [[ "$MODEL_ID" == *"[1m]"* ]] || [[ "$MODEL_ID" == *"1m"* ]]; then
-  WINDOW=1000000; T_DRIFT=200000; T_DUMB=400000
-elif [[ "$MODEL_ID" == *opus* ]] || [[ "$MODEL" == *Opus* ]]; then
-  WINDOW=200000;  T_DRIFT=120000; T_DUMB=160000
-elif [[ "$MODEL_ID" == *haiku* ]] || [[ "$MODEL" == *Haiku* ]]; then
-  WINDOW=200000;  T_DRIFT=60000;  T_DUMB=100000
-else
-  WINDOW=200000;  T_DRIFT=80000;  T_DUMB=120000
-fi
+IFS=$'\t' read -r WINDOW T_DRIFT T_DUMB ZONE_COLOR ZONE_LABEL \
+  <<< "$(classify_zone "$MODEL_ID" "$MODEL" "$CTX_TOKENS")"
 
-if   [ "$CTX_TOKENS" -ge "$T_DUMB" ];  then ZONE_COLOR="$RED";    ZONE_LABEL="🤪 dumb zone"
-elif [ "$CTX_TOKENS" -ge "$T_DRIFT" ]; then ZONE_COLOR="$YELLOW"; ZONE_LABEL="🥱 drifting"
-else                                        ZONE_COLOR="$GREEN";  ZONE_LABEL="🧐 smart zone"; fi
 CTX_COLOR="$ZONE_COLOR"
 
 # ---- token formatter ----
@@ -141,6 +105,4 @@ LINE3="💰 ${GOLD}\$${COST_FMT}${RESET}"
 [ -n "$BURN_RATE" ] && LINE3="${LINE3} ${DIM}(${RESET}${BURN}\$${BURN_RATE}/h${RESET}${DIM})${RESET}"
 [ -n "$TPM" ]       && LINE3="${LINE3}  📊 ${LAV}${TPM} tpm${RESET}"
 
-echo -e "$LINE1"
-echo -e "$LINE2"
-echo -e "$LINE3"
+render_lines
