@@ -29,9 +29,16 @@ _load_validator() {
 _FORCE_ENV="${FORCE:-0}"
 FORCE=0
 [ "$_FORCE_ENV" = "1" ] && FORCE=1
+UNINSTALL=0
 for arg in "$@"; do
   [ "$arg" = "--force" ] && FORCE=1
+  [ "$arg" = "--uninstall" ] && UNINSTALL=1
 done
+
+if [ "$UNINSTALL" = "1" ] && [ "$FORCE" = "1" ]; then
+  echo "[uninstall] ERROR: --uninstall and --force are mutually exclusive" >&2
+  exit 1
+fi
 
 _jq_install_hint() {
   local os
@@ -62,6 +69,60 @@ if ! command -v jq >/dev/null 2>&1; then
   echo "  $(_jq_install_hint)" >&2
   echo "[jq-check] Aborting." >&2
   exit 1
+fi
+
+_write_settings() {
+  local json="$1"
+  printf '%s\n' "$json" > "$SETTINGS_TMP"
+  mv "$SETTINGS_TMP" "$SETTINGS"
+}
+
+_normalize_cmd() {
+  printf '%s' "$1" | tr -s ' '
+}
+
+# ---------------------------------------------------------------------------
+# Uninstall mode
+# ---------------------------------------------------------------------------
+if [ "$UNINSTALL" = "1" ]; then
+  if [ ! -f "$SETTINGS" ]; then
+    echo "[uninstall] No $SETTINGS to clean up."
+  else
+    EXISTING_CMD="$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null || true)"
+    DESIRED_COMMAND="bash $TARGET"
+
+    if [ -z "$EXISTING_CMD" ]; then
+      echo "[uninstall] No statusLine in $SETTINGS — nothing to remove."
+    else
+      NORM_EXISTING="$(_normalize_cmd "$EXISTING_CMD")"
+      NORM_DESIRED="$(_normalize_cmd "$DESIRED_COMMAND")"
+
+      if [ "$NORM_EXISTING" = "$NORM_DESIRED" ]; then
+        cp "$SETTINGS" "$SETTINGS_BAK"
+        _write_settings "$(jq 'del(.statusLine)' "$SETTINGS_BAK")"
+        echo "[uninstall] Removed statusLine from $SETTINGS (backup at $SETTINGS_BAK)."
+      else
+        echo "[uninstall] WARNING: statusLine in $SETTINGS points to $EXISTING_CMD — leaving it alone."
+      fi
+    fi
+  fi
+
+  if [ -f "$TARGET" ]; then
+    rm -f "$TARGET"
+    echo "[uninstall] Removed $TARGET."
+  else
+    echo "[uninstall] $TARGET not found — nothing to remove."
+  fi
+
+  if [ -d "$LIB_DIR" ]; then
+    rm -rf "$LIB_DIR"
+    echo "[uninstall] Removed $LIB_DIR."
+  else
+    echo "[uninstall] $LIB_DIR not found — nothing to remove."
+  fi
+
+  echo "[uninstall] Done."
+  exit 0
 fi
 
 mkdir -p "$CLAUDE_DIR" "$LIB_DIR"
@@ -105,16 +166,6 @@ NEW_STATUSLINE='{
   "command": "bash '"$TARGET"'",
   "padding": 0
 }'
-
-_write_settings() {
-  local json="$1"
-  printf '%s\n' "$json" > "$SETTINGS_TMP"
-  mv "$SETTINGS_TMP" "$SETTINGS"
-}
-
-_normalize_cmd() {
-  printf '%s' "$1" | tr -s ' '
-}
 
 if [ ! -f "$SETTINGS" ]; then
   _write_settings "$(jq -n --argjson sl "$NEW_STATUSLINE" '{"statusLine": $sl}')"

@@ -114,6 +114,16 @@ This drops `statusline.sh` into `~/.claude/` and prints the snippet you need to 
 
 ---
 
+## Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/juanpinheiro/cc-dumb-zone-statusline/main/install.sh | bash -s -- --uninstall
+```
+
+Removes `statusLine` from `~/.claude/settings.json` (only if it points to the installed script — a backup is saved as `settings.json.bak`), then deletes `~/.claude/statusline.sh` and `~/.claude/lib/`. Safe to run twice.
+
+---
+
 ## Model thresholds
 
 The script reads `model.id` and `model.display_name` from Claude Code's statusline input and picks thresholds accordingly:

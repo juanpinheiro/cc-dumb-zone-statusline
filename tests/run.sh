@@ -517,6 +517,164 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario 9a — install then uninstall: statusLine removed, files deleted, .bak created
+# ---------------------------------------------------------------------------
+FAKE_HOME_9A="$(_mktmp)"
+
+echo "→ Scenario 9a: install then uninstall"
+
+mkdir -p "$FAKE_HOME_9A/.claude"
+printf '{"foo": "bar"}\n' > "$FAKE_HOME_9A/.claude/settings.json"
+_run_installer "$FAKE_HOME_9A" > "$FAKE_HOME_9A/install.log" 2>&1
+
+EXIT_CODE_9A=0
+_run_installer "$FAKE_HOME_9A" --uninstall > "$FAKE_HOME_9A/uninstall.log" 2>&1 || EXIT_CODE_9A=$?
+
+if [ "$EXIT_CODE_9A" -eq 0 ]; then
+  _pass "scenario 9a: uninstall exited 0"
+else
+  _fail "scenario 9a: uninstall exited non-zero ($EXIT_CODE_9A)"
+  cat "$FAKE_HOME_9A/uninstall.log"
+fi
+
+SETTINGS_9A="$FAKE_HOME_9A/.claude/settings.json"
+HAS_STATUSLINE_9A="$(jq 'has("statusLine")' "$SETTINGS_9A" 2>/dev/null || true)"
+if [ "$HAS_STATUSLINE_9A" = "false" ]; then
+  _pass "scenario 9a: statusLine key removed from settings.json"
+else
+  _fail "scenario 9a: statusLine key still present in settings.json"
+fi
+
+FOO_9A="$(jq -r '.foo' "$SETTINGS_9A" 2>/dev/null || true)"
+if [ "$FOO_9A" = "bar" ]; then
+  _pass "scenario 9a: other keys preserved after uninstall"
+else
+  _fail "scenario 9a: other keys lost after uninstall (foo='$FOO_9A')"
+fi
+
+if [ ! -f "$FAKE_HOME_9A/.claude/statusline.sh" ]; then
+  _pass "scenario 9a: statusline.sh removed"
+else
+  _fail "scenario 9a: statusline.sh still present after uninstall"
+fi
+
+if [ ! -d "$FAKE_HOME_9A/.claude/lib" ]; then
+  _pass "scenario 9a: lib/ removed"
+else
+  _fail "scenario 9a: lib/ still present after uninstall"
+fi
+
+if [ -f "$FAKE_HOME_9A/.claude/settings.json.bak" ]; then
+  _pass "scenario 9a: .bak file exists"
+else
+  _fail "scenario 9a: .bak file missing after uninstall"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 9b — foreign statusLine: warn, leave alone, remove files if present
+# ---------------------------------------------------------------------------
+FAKE_HOME_9B="$(_mktmp)"
+
+echo "→ Scenario 9b: foreign statusLine → warn, leave alone"
+
+mkdir -p "$FAKE_HOME_9B/.claude"
+printf '{"statusLine": {"type": "command", "command": "bash /some/other/script.sh"}}\n' \
+  > "$FAKE_HOME_9B/.claude/settings.json"
+
+UNINSTALL_LOG_9B="$FAKE_HOME_9B/uninstall.log"
+EXIT_CODE_9B=0
+_run_installer "$FAKE_HOME_9B" --uninstall > "$UNINSTALL_LOG_9B" 2>&1 || EXIT_CODE_9B=$?
+
+if [ "$EXIT_CODE_9B" -eq 0 ]; then
+  _pass "scenario 9b: uninstall exited 0 with foreign statusLine"
+else
+  _fail "scenario 9b: uninstall exited non-zero ($EXIT_CODE_9B)"
+  cat "$UNINSTALL_LOG_9B"
+fi
+
+CURRENT_CMD_9B="$(jq -r '.statusLine.command' "$FAKE_HOME_9B/.claude/settings.json" 2>/dev/null || true)"
+if [ "$CURRENT_CMD_9B" = "bash /some/other/script.sh" ]; then
+  _pass "scenario 9b: foreign statusLine left untouched"
+else
+  _fail "scenario 9b: foreign statusLine was modified (got '$CURRENT_CMD_9B')"
+fi
+
+if grep -qi 'warning' "$UNINSTALL_LOG_9B"; then
+  _pass "scenario 9b: warning emitted for foreign statusLine"
+else
+  _fail "scenario 9b: expected warning in output for foreign statusLine"
+  cat "$UNINSTALL_LOG_9B"
+fi
+
+if [ ! -f "$FAKE_HOME_9B/.claude/settings.json.bak" ]; then
+  _pass "scenario 9b: no .bak created for foreign statusLine"
+else
+  _fail "scenario 9b: .bak should not be created when leaving foreign statusLine alone"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 9c — idempotency: install → uninstall → uninstall again
+# ---------------------------------------------------------------------------
+FAKE_HOME_9C="$(_mktmp)"
+
+echo "→ Scenario 9c: uninstall idempotency"
+
+_run_installer "$FAKE_HOME_9C" > "$FAKE_HOME_9C/install.log" 2>&1
+_run_installer "$FAKE_HOME_9C" --uninstall > "$FAKE_HOME_9C/uninstall1.log" 2>&1
+
+EXIT_CODE_9C=0
+_run_installer "$FAKE_HOME_9C" --uninstall > "$FAKE_HOME_9C/uninstall2.log" 2>&1 || EXIT_CODE_9C=$?
+
+if [ "$EXIT_CODE_9C" -eq 0 ]; then
+  _pass "scenario 9c: second uninstall exited 0"
+else
+  _fail "scenario 9c: second uninstall exited non-zero ($EXIT_CODE_9C)"
+  cat "$FAKE_HOME_9C/uninstall2.log"
+fi
+
+if grep -qiE 'nothing to remove|not found' "$FAKE_HOME_9C/uninstall2.log"; then
+  _pass "scenario 9c: second uninstall reports nothing to remove"
+else
+  _fail "scenario 9c: expected 'nothing to remove' / 'not found' in second uninstall output"
+  cat "$FAKE_HOME_9C/uninstall2.log"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario 9d — --uninstall --force mutual exclusion
+# ---------------------------------------------------------------------------
+FAKE_HOME_9D="$(_mktmp)"
+
+echo "→ Scenario 9d: --uninstall --force mutual exclusion"
+
+EXIT_CODE_9D=0
+ERR_9D="$FAKE_HOME_9D/err.log"
+_run_installer "$FAKE_HOME_9D" --uninstall --force > "$FAKE_HOME_9D/out.log" 2>"$ERR_9D" || EXIT_CODE_9D=$?
+
+if [ "$EXIT_CODE_9D" -ne 0 ]; then
+  _pass "scenario 9d: --uninstall --force exits non-zero"
+else
+  _fail "scenario 9d: --uninstall --force should exit non-zero but didn't"
+fi
+
+if grep -q '\[uninstall\]' "$ERR_9D"; then
+  _pass "scenario 9d: stderr contains [uninstall] tag"
+else
+  _fail "scenario 9d: stderr missing [uninstall] tag"
+  cat "$ERR_9D"
+fi
+
+# Also test --force --uninstall order
+EXIT_CODE_9D2=0
+ERR_9D2="$FAKE_HOME_9D/err2.log"
+_run_installer "$FAKE_HOME_9D" --force --uninstall > "$FAKE_HOME_9D/out2.log" 2>"$ERR_9D2" || EXIT_CODE_9D2=$?
+
+if [ "$EXIT_CODE_9D2" -ne 0 ]; then
+  _pass "scenario 9d: --force --uninstall exits non-zero"
+else
+  _fail "scenario 9d: --force --uninstall should exit non-zero but didn't"
+fi
+
+# ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
 echo "→ Running unit tests"
