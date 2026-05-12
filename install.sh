@@ -3,7 +3,7 @@
 set -e
 
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-REPO_URL="https://raw.githubusercontent.com/juanpinheiro/cc-dumb-zone-statusline/main"
+_RELEASES_API="https://api.github.com/repos/juanpinheiro/cc-dumb-zone-statusline/releases/latest"
 TARGET="$CLAUDE_DIR/statusline.sh"
 LIB_DIR="$CLAUDE_DIR/lib"
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -77,13 +77,18 @@ if [ -n "${SOURCE:-}" ]; then
   echo "[download] Copying lib/ from $SOURCE_DIR/lib to $LIB_DIR"
   cp "$SOURCE_DIR/lib/"*.sh "$LIB_DIR/"
 else
+  # shellcheck source=/dev/null
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/resolve_release.sh"
+  _RESOLVED_REF="$(resolve_release_ref "$_RELEASES_API")"
+  echo "[download] Installing from ref: $_RESOLVED_REF"
+  REPO_URL="https://raw.githubusercontent.com/juanpinheiro/cc-dumb-zone-statusline/$_RESOLVED_REF"
   echo "[download] Fetching statusline.sh to $TARGET"
   if ! curl -fsSL "$REPO_URL/statusline.sh" -o "$TARGET"; then
     echo "[download] Failed to fetch statusline.sh" >&2
     exit 1
   fi
   echo "[download] Fetching lib/ scripts"
-  for f in parse_hook_input.sh classify_zone.sh render_lines.sh validate_install.sh; do
+  for f in parse_hook_input.sh classify_zone.sh render_lines.sh validate_install.sh resolve_release.sh; do
     if ! curl -fsSL "$REPO_URL/lib/$f" -o "$LIB_DIR/$f"; then
       echo "[download] Failed to fetch lib/$f" >&2
       exit 1
