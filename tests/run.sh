@@ -267,20 +267,18 @@ echo "→ Scenario 6: jq missing → precheck aborts"
 SHIM_BIN_6="$FAKE_HOME_6/shim-bin"
 mkdir -p "$SHIM_BIN_6"
 
-# Build an isolated PATH dir: symlink every executable from the current PATH
-# except jq. Lets the installer run normally and fail only on its jq lookup.
-IFS=: read -ra PATH_PARTS <<< "$PATH"
-for part in "${PATH_PARTS[@]}"; do
-  [ -d "$part" ] || continue
-  for f in "$part"/*; do
-    [ -e "$f" ] || continue
-    name="$(basename "$f")"
-    case "$name" in
-      jq|jq.exe) continue ;;
-    esac
-    [ -e "$SHIM_BIN_6/$name" ] && continue
-    ln -s "$f" "$SHIM_BIN_6/$name" 2>/dev/null || true
-  done
+# install.sh's jq precheck only invokes `uname` before aborting; the test
+# runner also needs to find `bash` to launch install.sh. Wrapping just those
+# two is enough to give the installer a jq-free PATH without iterating every
+# executable on the host.
+for cmd in bash uname; do
+  real="$(command -v "$cmd" 2>/dev/null || true)"
+  [ -z "$real" ] && continue
+  cat > "$SHIM_BIN_6/$cmd" <<EOF
+#!/bin/sh
+exec "$real" "\$@"
+EOF
+  chmod +x "$SHIM_BIN_6/$cmd"
 done
 PATH_NO_JQ="$SHIM_BIN_6"
 
