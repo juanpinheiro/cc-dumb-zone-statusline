@@ -78,6 +78,11 @@ Three lines of statusline:
 curl -fsSL https://raw.githubusercontent.com/juanpinheiro/cc-dumb-zone-statusline/main/install.sh | bash
 ```
 
+```powershell
+# Windows (PowerShell, paste in PowerShell as-is)
+irm https://raw.githubusercontent.com/juanpinheiro/cc-dumb-zone-statusline/main/install.ps1 | iex
+```
+
 This drops `statusline.sh` into `~/.claude/` and prints the snippet you need to add to `~/.claude/settings.json`.
 
 ### Manual install
