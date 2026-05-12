@@ -10,6 +10,22 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 SETTINGS_BAK="$CLAUDE_DIR/settings.json.bak"
 SETTINGS_TMP="$CLAUDE_DIR/settings.json.tmp"
 
+# Source the validator (supports both local SOURCE= runs and post-download runs).
+# When SOURCE= is set, we load it from the repo's lib/ alongside SOURCE.
+# Otherwise it was downloaded alongside statusline.sh into $LIB_DIR.
+_load_validator() {
+  local validator_path
+  if [ -n "${SOURCE:-}" ]; then
+    local src_dir
+    src_dir="$(cd "$(dirname "$SOURCE")" && pwd)"
+    validator_path="$src_dir/lib/validate_install.sh"
+  else
+    validator_path="$LIB_DIR/validate_install.sh"
+  fi
+  # shellcheck source=/dev/null
+  source "$validator_path"
+}
+
 _FORCE_ENV="${FORCE:-0}"
 FORCE=0
 [ "$_FORCE_ENV" = "1" ] && FORCE=1
@@ -67,7 +83,7 @@ else
     exit 1
   fi
   echo "[download] Fetching lib/ scripts"
-  for f in parse_hook_input.sh classify_zone.sh render_lines.sh; do
+  for f in parse_hook_input.sh classify_zone.sh render_lines.sh validate_install.sh; do
     if ! curl -fsSL "$REPO_URL/lib/$f" -o "$LIB_DIR/$f"; then
       echo "[download] Failed to fetch lib/$f" >&2
       exit 1
@@ -75,6 +91,8 @@ else
   done
 fi
 chmod +x "$TARGET"
+
+_load_validator
 
 DESIRED_COMMAND="bash $TARGET"
 NEW_STATUSLINE='{
@@ -126,6 +144,43 @@ else
       fi
     fi
   fi
+fi
+
+FIXTURE_PATH="${TESTS_DIR_FOR_VALIDATOR:-}"
+if [ -z "$FIXTURE_PATH" ]; then
+  # Locate the fixture relative to this script (works for local runs).
+  _SCRIPT_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  _FIXTURE_CANDIDATE="$_SCRIPT_SELF/tests/fixtures/hook-input.json"
+  if [ -f "$_FIXTURE_CANDIDATE" ]; then
+    FIXTURE_PATH="$_FIXTURE_CANDIDATE"
+  else
+    # Write a minimal inline fixture to a tempfile.
+    _FIXTURE_TMP="$(mktemp /tmp/hook-input-XXXXXX.json)"
+    cat > "$_FIXTURE_TMP" <<'FIXTURE_EOF'
+{
+  "model": {"display_name": "Opus 4.7", "id": "claude-opus-4-7"},
+  "version": "1.0.0",
+  "transcript_path": "",
+  "workspace": {"current_dir": "/tmp"},
+  "cwd": "/tmp",
+  "context_window": {
+    "used_percentage": 12.5,
+    "current_usage": {"input_tokens": 5000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+    "total_input_tokens": 50000,
+    "total_output_tokens": 8000
+  },
+  "cost": {"total_cost_usd": 0.42, "total_duration_ms": 600000}
+}
+FIXTURE_EOF
+    FIXTURE_PATH="$_FIXTURE_TMP"
+    trap 'rm -f "$_FIXTURE_TMP"' EXIT
+  fi
+fi
+
+echo "[install] Running post-install validation..."
+if ! validate_install "$SETTINGS" "$FIXTURE_PATH"; then
+  echo "[install] Validation failed. Check errors above." >&2
+  exit 1
 fi
 
 echo "[install] Done. Restart Claude Code to see the statusline."
